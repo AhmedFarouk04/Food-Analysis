@@ -7,14 +7,16 @@ from io import BytesIO
 from PIL import Image
 import base64
 import os
-from dotenv import load_dotenv
 
+# Load environment variables
+from dotenv import load_dotenv
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-app = FastAPI(title="Food Analyzer API", version="1.5")
+app = FastAPI(title="Food Analyzer API", version="2.0")
 
+# Allow Frontend to access API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,9 +24,9 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# --------------------------------------------------
-# Compress image → reduce token usage
-# --------------------------------------------------
+# -------------------------------------
+# Compress Image (Reduce cost)
+# -------------------------------------
 def compress_image(image_bytes: bytes, quality=45):
     img = Image.open(BytesIO(image_bytes))
     rgb = img.convert("RGB")
@@ -35,12 +37,12 @@ def compress_image(image_bytes: bytes, quality=45):
 
 @app.get("/")
 async def home():
-    return {"status": "Food Analyzer API Running ⚡"}
+    return {"status": "Food Analyzer API Running 🔥"}
 
 
-# --------------------------------------------------
-# Main endpoint (NO CACHE)
-# --------------------------------------------------
+# -------------------------------------
+# Analyze endpoint
+# -------------------------------------
 @app.post("/analyze-food")
 async def analyze_food(image: UploadFile = File(...)):
     try:
@@ -50,16 +52,14 @@ async def analyze_food(image: UploadFile = File(...)):
                 content={"error": "Only JPEG or PNG allowed"}
             )
 
-        # Read & compress
+        # Read+Compress
         image_bytes = await image.read()
         compressed = compress_image(image_bytes)
 
-        # Convert to base64
+        # Convert → base64
         b64_image = base64.b64encode(compressed).decode()
 
-        # --------------------------------------------
-        # LOW COST Vision Processing (Responses API)
-        # --------------------------------------------
+        # OPENAI Vision Call
         response = client.responses.create(
             model="gpt-4o-mini",
             input=[
