@@ -1,5 +1,6 @@
 import { OpenAI } from "openai";
-import sharp from "sharp";
+import formidable from "formidable";
+import fs from "fs";
 
 export const config = {
   api: {
@@ -8,53 +9,53 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Only POST allowed" });
-    }
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Only POST allowed" });
 
-    let imageBuffer = Buffer.from([]);
+  const form = formidable({ multiples: false });
 
-    await new Promise((resolve) => {
-      req.on("data", (chunk) => {
-        imageBuffer = Buffer.concat([imageBuffer, chunk]);
+  form.parse(req, async (err, fields, files) => {
+    try {
+      if (err) return res.status(400).json({ error: "Form parsing error" });
+
+      const imageFile = files.image;
+
+      if (!imageFile)
+        return res.status(400).json({ error: "image field is required" });
+
+      // Read uploaded image
+      const fileData = fs.readFileSync(imageFile.filepath);
+      const base64Image = fileData.toString("base64");
+
+      const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
       });
-      req.on("end", resolve);
-    });
 
-    const compressed = await sharp(imageBuffer)
-      .jpeg({ quality: 55 })
-      .toBuffer();
+      const response = await client.responses.create({
+        model: "gpt-4o-mini",
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "حلل الطعام الموجود في الصورة بالتفصيل.",
+              },
+              {
+                type: "input_image",
+                image_url: `data:image/jpeg;base64,${base64Image}`,
+              },
+            ],
+          },
+        ],
+      });
 
-    const base64Image = compressed.toString("base64");
-
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-    const aiResp = await client.responses.create({
-      model: "gpt-4o-mini",
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: "حلل الطعام الموجود في الصورة بدقة. استخرج: اسم الطبق، المكونات، السعرات، مناسب للدايت أم لا، تحليل الماكروز. قدم النتيجة بصيغة JSON.",
-            },
-            {
-              type: "input_image",
-              image_url: `data:image/jpeg;base64,${base64Image}`,
-            },
-          ],
-        },
-      ],
-    });
-
-    return res.status(200).json({
-      success: true,
-      result: aiResp.output_text,
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: err.message });
-  }
+      return res.json({
+        success: true,
+        analysis: response.output_text,
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
 }
