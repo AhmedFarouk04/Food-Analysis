@@ -11,29 +11,37 @@ const app = express();
 const upload = multer();
 app.use(cors());
 
-app.post("/analyze-food", upload.single("image"), async (req, res) => {
+// ----------- ROUTES -------------
+app.get("/", (req, res) => {
+  res.send("Food Analyzer API Running ✔️");
+});
+
+app.post("/api/analyze-food", upload.single("image"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "image field is required" });
     }
 
+    // Compress image
     const compressed = await sharp(req.file.buffer)
-      .jpeg({ quality: 55 })
+      .jpeg({ quality: 45 })
       .toBuffer();
 
     const base64Image = compressed.toString("base64");
 
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
 
     const response = await client.responses.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       input: [
         {
           role: "user",
           content: [
             {
               type: "input_text",
-              text: "حلل الطعام الموجود في الصورة بدقة. استخرج: 1) اسم الطبق، 2) المكونات، 3) السعرات، 4) مناسب للدايت أم لا، 5) تحليل الماكروز. أعد الرد بصيغة JSON منظمة.",
+              text: "حلل الطعام الموجود في الصورة: السعرات، المكونات، وهل مناسب للدايت؟ باختصار.",
             },
             {
               type: "input_image",
@@ -44,17 +52,21 @@ app.post("/analyze-food", upload.single("image"), async (req, res) => {
       ],
     });
 
-    return res.json({
+    res.json({
       success: true,
       result: response.output_text,
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get("/", (req, res) => {
-  res.send("Food Analyzer API Running ✔️");
-});
+// ----------- LISTEN (Local only) -------------
+if (process.env.VERCEL !== "1") {
+  app.listen(3000, () => {
+    console.log("Local server running → http://localhost:3000");
+  });
+}
 
-app.listen(3000, () => console.log("Server running on http://localhost:3000"));
+export default app;
