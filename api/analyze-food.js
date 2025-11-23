@@ -1,6 +1,8 @@
 import { OpenAI } from "openai";
 import formidable from "formidable";
 import sharp from "sharp";
+import fs from "fs";
+import path from "path";
 
 export const config = {
   api: {
@@ -14,7 +16,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    const form = formidable({ multiples: false });
+    // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+    // أهم جزء: نحدد فولدر tmp بنفسنا عشان Vercel
+    const uploadDir = "/tmp";
+    const form = formidable({
+      uploadDir,
+      keepExtensions: true,
+      multiples: false,
+      maxFileSize: 20 * 1024 * 1024,
+      filter: (part) => part.mimetype?.startsWith("image/"), // قبول صور فقط
+    });
+    // ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
 
     const { files } = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
@@ -23,17 +35,16 @@ export default async function handler(req, res) {
       });
     });
 
-    // 🔥 الصور مع Formidable v3 بترجع Arrays
     const imgFile = files.image?.[0];
-
     if (!imgFile) {
-      return res.status(400).json({ error: "Image is required" });
+      return res.status(400).json({ error: "No image uploaded" });
     }
 
-    // 🔥 لازم ناخد imgFile.filepath
-    const buffer = await sharp(imgFile.filepath)
-      .jpeg({ quality: 45 })
-      .toBuffer();
+    // الملف دلوقتي محفوظ في /tmp
+    const filePath = imgFile.filepath;
+
+    // 🔥 Sharp هنا هيشتغل بدون Invalid Input
+    const buffer = await sharp(filePath).jpeg({ quality: 45 }).toBuffer();
 
     const base64Image = buffer.toString("base64");
 
@@ -64,7 +75,7 @@ export default async function handler(req, res) {
       result: response.output_text,
     });
   } catch (error) {
-    console.error("ERROR:", error);
+    console.error("ERROR", error);
     return res.status(500).json({ error: error.message });
   }
 }
