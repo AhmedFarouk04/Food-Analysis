@@ -4,7 +4,7 @@ import sharp from "sharp";
 
 export const config = {
   api: {
-    bodyParser: false, // لازم علشان Formidable
+    bodyParser: false,
   },
 };
 
@@ -16,24 +16,26 @@ export default async function handler(req, res) {
   try {
     const form = formidable({ multiples: false });
 
-    const { fields, files } = await new Promise((resolve, reject) => {
+    const { files } = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
         if (err) reject(err);
         resolve({ fields, files });
       });
     });
 
-    const imgFile = files.image;
+    // 🔥 الصور مع Formidable v3 بترجع Arrays
+    const imgFile = files.image?.[0];
+
     if (!imgFile) {
       return res.status(400).json({ error: "Image is required" });
     }
 
-    // اقرأ الصورة من temporary path
-    const fileBuffer = await sharp(imgFile.filepath)
+    // 🔥 لازم ناخد imgFile.filepath
+    const buffer = await sharp(imgFile.filepath)
       .jpeg({ quality: 45 })
       .toBuffer();
 
-    const base64Image = fileBuffer.toString("base64");
+    const base64Image = buffer.toString("base64");
 
     const client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -62,7 +64,7 @@ export default async function handler(req, res) {
       result: response.output_text,
     });
   } catch (error) {
-    console.error("Error:", error);
+    console.error("ERROR:", error);
     return res.status(500).json({ error: error.message });
   }
 }
